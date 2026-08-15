@@ -1,101 +1,114 @@
 # Examples
 
-Every example directory contains one Arduino sketch. In Arduino IDE, open the
-`.ino` file inside the example directory. In Arduino CLI, compile the directory
-that contains the `.ino` file.
+Each example folder contains one Arduino sketch with the same name. The board
+folder is part of the example's configuration: UART objects, pins, OT/IO pin,
+LED behavior, and networking APIs are intentionally explicit there.
 
-## Board-specific UART readers
+## Board examples
 
-These sketches print the same labelled numeric fields as the original working
-plot reader:
+All six board directories contain:
 
-```text
-distance_cm_raw:158 distance_cm_filtered:158 presence:1
-```
+- `DistancePresence`: parses normal-mode UART records and prints
+  `distance_cm_raw:X distance_cm_filtered:Y presence:Z`. The built-in LED is
+  on while `sensor.isPresent()` is true.
+- `GPIOPresence`: reads the active-high OT/IO pin and prints debounced state
+  changes. The built-in LED is on while `presencePin.isPresent()` is true.
+- `RawAsciiMonitor`: copies raw UART bytes to the monitor without parsing.
+- `FilterAndFreshness`: prints filtered/raw values and `data_valid` every 250 ms.
+- `GPIOAndUART`: compares UART presence with raw/debounced OT/IO state.
 
-| Board directory | Sketch | Serial setup | Default sensor pins |
-| --- | --- | --- | --- |
-| `RP2040/UART_Reader` | `UART_Reader.ino` | Pico W `Serial1` | GP0 TX, GP1 RX |
-| `ESP32/UART_Reader` | `UART_Reader.ino` | ESP32 `HardwareSerial(2)` | GPIO17 TX, GPIO16 RX |
-| `ESP32S3/UART_Reader` | `UART_Reader.ino` | ESP32-S3 `HardwareSerial(1)` | GPIO17 TX, GPIO16 RX |
+Network-capable board folders also contain `WebDashboard`:
 
-The ESP32-S3 pin choice is an example only. Board variants often reserve
-different GPIO, so change the constants in that sketch to match the board.
+| Board | Network API | Dashboard UART | OT/IO default | Notes |
+| --- | --- | --- | --- | --- |
+| `RP2040` | `WiFi.h` and `WiFiServer` | `Serial1`, GP1 RX / GP0 TX | GP2 | Pico W station-mode connection. |
+| `ESP32` | `WiFi.h` and `WiFiServer` | UART2, GPIO16 RX / GPIO17 TX | GPIO4 | GPIO4 avoids the common GPIO2 LED pin. |
+| `ESP32S3` | `WiFi.h` and `WiFiServer` | UART1, GPIO16 RX / GPIO17 TX | GPIO4 | Check the actual board pinout. |
+| `UNO_R4` | `WiFiS3.h` and `WiFiServer` | `Serial1`, D0 RX / D1 TX | D2 | UNO R4 WiFi only. |
+| `UNO_Q` | `Arduino_RouterBridge` and `BridgeTCPServer` | `Serial1` | GPIO2 | Host computer supplies network access. |
 
-The classic UNO, UNO R4, and UNO Q are covered by the shared distance example.
-The UNO fallback uses `SoftwareSerial`; at 115200 baud it may not be reliable.
+Classic `UNO` has no web dashboard because it has no onboard network interface.
+Its UART examples use `SoftwareSerial` on D10/D11 and may not keep up at
+115200 baud.
 
-## Shared examples
+## Dashboard setup
 
-### `Common/DistancePresence`
+1. Open the board's `WebDashboard/WebDashboard.ino`.
+2. Replace `YOUR_WIFI_SSID` and `YOUR_WIFI_PASSWORD` locally for Pico W,
+   ESP32, ESP32-S3, or UNO R4 WiFi. Do not commit real credentials.
+3. Select the matching board and upload.
+4. Open the serial monitor at 115200 baud and browse to the printed URL.
+5. For UNO Q, make sure the host-side RouterBridge network service is running,
+   then browse to the host's address on port 80.
 
-This cross-board sketch shows:
-
-- `getDistanceRawCm()`;
-- `getDistanceFilteredCm()`;
-- `isPresent()`;
-- `isDataValid()`;
-- enabling or disabling the filter with `ENABLE_DISTANCE_FILTER`.
-
-It calls `sensor.update()` on every loop and prints a sample every 250 ms. The
-`data_valid` field becomes `0` after the configured freshness interval without
-a valid record, while the last parsed presence state remains available.
-
-### `Common/GPIOPresence`
-
-This is the UART-free use case. Connect LD2402 J2 pin 2 OT/IO to the configured
-input, which defaults to pin `2` (GP2 on a Pico W), and J2 pin 3 to board GND.
-The sketch prints an initial state and then only prints debounced state changes.
+The dashboard uses a one-second HTML refresh. It reports raw distance, filtered
+distance, UART presence, raw OT/IO, debounced OT/IO, and UART freshness. The
+UART parser and GPIO helper continue to be serviced in the main loop.
 
 ## Arduino IDE workflow
 
-1. Install the board package for the selected board.
-2. Install or place this library in the Arduino libraries directory.
-3. Open one `.ino` file from the tree above.
-4. Select the matching board and serial monitor baud rate of 115200.
-5. Wire sensor TX to board RX and sensor RX to board TX.
+Install the matching board package, install this library, open the desired
+`.ino`, select the board, and open the serial monitor at 115200 baud. Cross the
+sensor UART directions and connect sensor ground to board ground. Follow the
+voltage warning in the main README before wiring a 5 V board.
 
-The sensor must be powered according to the supplied manual. Do not infer
-power or logic levels from a successful compile.
+## Arduino CLI compile matrix
 
-## Compile checks
-
-From the parent directory of this checkout, set `LIB` and `LIB_PARENT` to the
-absolute library path and its parent directory. This script compiles every
-example on all five target boards and gives every build an isolated directory:
+From the parent directory of this checkout:
 
 ```bash
 LIB=/path/to/LD2402
 LIB_PARENT=/path/to/parent-of-LD2402
 BUILD_ROOT=$(mktemp -d /tmp/ld2402-build.XXXXXX)
 
-examples=(
-  examples/RP2040/UART_Reader
-  examples/ESP32/UART_Reader
-  examples/ESP32S3/UART_Reader
-  examples/Common/DistancePresence
-  examples/Common/GPIOPresence
-)
-labels=(rp2040 esp32 uno r4 unoq)
-fqbns=(
-  rp2040:rp2040:rpipicow
-  esp32:esp32:esp32
-  arduino:avr:uno
-  arduino:renesas_uno:unor4wifi
-  arduino:zephyr:unoq
-)
-
-for example in "${examples[@]}"; do
-  example_id=${example//\//_}
-  for index in "${!fqbns[@]}"; do
+compile_board() {
+  label=$1
+  fqbn=$2
+  board_dir=$3
+  shift 3
+  for example in "$@"; do
     arduino-cli compile --warnings none \
       --libraries "$LIB_PARENT" \
-      --build-path "$BUILD_ROOT/${example_id}_${labels[$index]}" \
-      --fqbn "${fqbns[$index]}" "$LIB/$example"
+      --build-path "$BUILD_ROOT/${label}_${example}" \
+      --fqbn "$fqbn" "$LIB/examples/$board_dir/$example"
   done
-done
+}
+
+compile_board rp2040 rp2040:rp2040:rpipicow RP2040 \
+  DistancePresence GPIOPresence RawAsciiMonitor FilterAndFreshness GPIOAndUART WebDashboard
+compile_board esp32 esp32:esp32:esp32 ESP32 \
+  DistancePresence GPIOPresence RawAsciiMonitor FilterAndFreshness GPIOAndUART WebDashboard
+compile_board esp32s3 esp32:esp32:esp32s3 ESP32S3 \
+  DistancePresence GPIOPresence RawAsciiMonitor FilterAndFreshness GPIOAndUART WebDashboard
+compile_board uno arduino:avr:uno UNO \
+  DistancePresence GPIOPresence RawAsciiMonitor FilterAndFreshness GPIOAndUART
+compile_board unor4 arduino:renesas_uno:unor4wifi UNO_R4 \
+  DistancePresence GPIOPresence RawAsciiMonitor FilterAndFreshness GPIOAndUART WebDashboard
+compile_board unoq arduino:zephyr:unoq UNO_Q \
+  DistancePresence GPIOPresence RawAsciiMonitor FilterAndFreshness GPIOAndUART WebDashboard
 ```
 
-The UNO Q core also needs the `Arduino_RouterBridge` library installed. These
-commands prove compilation only; upload, wiring, and runtime behavior require
-the physical board and sensor.
+The UNO Q build requires the `Arduino_RouterBridge` dependency and its related
+libraries installed in the Arduino sketchbook. These builds prove compilation
+only; upload, Wi-Fi credentials, host networking, wiring, and physical sensor
+behavior require the actual hardware.
+
+## Output examples
+
+Distance example, suitable for Arduino IDE Serial Plotter:
+
+```text
+distance_cm_raw:158 distance_cm_filtered:158 presence:1
+```
+
+GPIO example:
+
+```text
+io_raw:1 presence:1
+```
+
+Filter example adds freshness:
+
+```text
+distance_cm_raw:158 distance_cm_filtered:157 presence:1 data_valid:1
+```
