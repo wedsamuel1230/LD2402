@@ -1,0 +1,15 @@
+# Operating-system metadata
+.DS_Store
+**/.DS_Store
+*.DS_Store
+
+# Arduino and local build output
+build/
+build-*/
+*.elf
+*.hex
+*.bin
+
+# The supplied vendor bundle is retained locally for development evidence but
+# is excluded from the public library release until redistribution is approved.
+/extras/vendor/

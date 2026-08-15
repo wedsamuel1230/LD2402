@@ -1,0 +1,15 @@
+LD2402	KEYWORD1
+LD2402PresencePin	KEYWORD1
+
+update	KEYWORD2
+read	KEYWORD2
+setFilterEnabled	KEYWORD2
+isFilterEnabled	KEYWORD2
+getDistanceRawCm	KEYWORD2
+getDistanceFilteredCm	KEYWORD2
+isPresent	KEYWORD2
+isDataValid	KEYWORD2
+lastUpdateMs	KEYWORD2
+begin	KEYWORD2
+rawPresence	KEYWORD2
+pin	KEYWORD2
